@@ -10,7 +10,7 @@ const {
 const express = require("express");
 
 /* =========================
-   DEBUG STARTUP
+   GLOBAL DEBUG / ANTI CRASH
 ========================= */
 
 console.log("🚀 Bot starting...");
@@ -46,7 +46,7 @@ app.get("/", (_, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🌐 Web server started");
+  console.log(`🌐 Web server started on port ${PORT}`);
 });
 
 /* =========================
@@ -61,7 +61,7 @@ const client = new Client({
 });
 
 /* =========================
-   LOGIN DEBUG
+   LOGIN
 ========================= */
 
 client.login(TOKEN)
@@ -78,8 +78,10 @@ client.login(TOKEN)
 ========================= */
 
 const DEPARTMENTS = {
+
   NYSP: {
     rootRole: "NYSP",
+
     ranks: [
       "Major",
       "Major Adjoint",
@@ -90,14 +92,29 @@ const DEPARTMENTS = {
       "Trooper",
       "Recrue"
     ],
+
     formateur: "Formateur NYSP",
-    special: ["Investigateur", "State SWAT"],
-    bypass: ["Major", "Major Adjoint", "Capitaine"],
-    top: ["Major", "Major Adjoint"]
+
+    special: [
+      "Investigateur",
+      "State SWAT"
+    ],
+
+    bypass: [
+      "Major",
+      "Major Adjoint",
+      "Capitaine"
+    ],
+
+    top: [
+      "Major",
+      "Major Adjoint"
+    ]
   },
 
   NYPD: {
     rootRole: "NYPD",
+
     ranks: [
       "Capitaine",
       "Capitaine Adjoint",
@@ -108,149 +125,366 @@ const DEPARTMENTS = {
       "Recrue",
       "Cadet"
     ],
+
     formateur: "Formateur NYPD",
-    special: ["Détective", "SWAT NYPD"],
-    bypass: ["Capitaine", "Capitaine Adjoint"],
-    top: ["Capitaine", "Capitaine Adjoint"]
+
+    special: [
+      "Détective",
+      "SWAT NYPD"
+    ],
+
+    bypass: [
+      "Capitaine",
+      "Capitaine Adjoint"
+    ],
+
+    top: [
+      "Capitaine",
+      "Capitaine Adjoint"
+    ]
   }
+
 };
 
 /* =========================
-   COMMANDS
+   SLASH COMMANDS
 ========================= */
 
 const commands = [
+
   new SlashCommandBuilder()
+
     .setName("promotion")
-    .setDescription("📢 Gestion RP des promotions")
-    .addUserOption(o =>
-      o.setName("joueur")
+    .setDescription("📢 Promotion RP")
+
+    .addUserOption(option =>
+      option
+        .setName("joueur")
         .setDescription("Joueur RP")
         .setRequired(true)
     )
-    .addRoleOption(o =>
-      o.setName("role")
+
+    .addRoleOption(option =>
+      option
+        .setName("role")
         .setDescription("Nouveau grade")
         .setRequired(true)
     )
-    .addStringOption(o =>
-      o.setName("raison")
+
+    .addStringOption(option =>
+      option
+        .setName("raison")
         .setDescription("Raison RP")
         .setRequired(true)
     )
-].map(c => c.toJSON());
+
+].map(command => command.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
+
   try {
+
     await rest.put(
       Routes.applicationCommands(CLIENT_ID),
       { body: commands }
     );
 
     console.log("✅ Commande /promotion enregistrée");
+
   } catch (error) {
-    console.error("❌ Slash command error:", error);
+
+    console.error("❌ COMMAND REGISTER ERROR:");
+    console.error(error);
+
   }
+
 })();
 
 /* =========================
-   READY DEBUG
+   READY
 ========================= */
 
 client.once("ready", () => {
-  console.log("🤖 BOT READY EVENT TRIGGERED");
-  console.log("Bot:", client.user.tag);
+
+  console.log("🤖 BOT READY EVENT");
+  console.log(`🤖 Connecté en tant que ${client.user.tag}`);
+
 });
 
 /* =========================
-   PROMOTION SYSTEM
+   EMBED LOG
 ========================= */
 
-client.on("interactionCreate", async interaction => {
+function createPromotionEmbed({
+  member,
+  role,
+  issuer,
+  reason,
+  deptName
+}) {
 
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== "promotion") return;
+  return new EmbedBuilder()
 
-  await interaction.deferReply();
+    .setColor("Blue")
 
-  const member = interaction.options.getMember("joueur");
-  const newRole = interaction.options.getRole("role");
-  const reason = interaction.options.getString("raison");
-  const issuer = interaction.member;
+    .setTitle("📢 Promotion RP")
 
-  let dept = null;
-  let deptName = null;
+    .addFields(
+      {
+        name: "👤 Joueur",
+        value: member.user.tag
+      },
 
-  for (const [name, data] of Object.entries(DEPARTMENTS)) {
-    if (issuer.roles.cache.some(r => r.name === data.rootRole)) {
-      dept = data;
-      deptName = name;
+      {
+        name: "🏅 Nouveau grade",
+        value: role.name
+      },
+
+      {
+        name: "📝 Raison",
+        value: reason
+      },
+
+      {
+        name: "👮 Promoteur",
+        value: issuer.user.tag
+      },
+
+      {
+        name: "🏛 Département",
+        value: deptName
+      }
+    )
+
+    .setTimestamp();
+
+}
+
+/* =========================
+   INTERACTION CREATE
+========================= */
+
+client.on("interactionCreate", async (interaction) => {
+
+  try {
+
+    if (!interaction.guild) return;
+
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName !== "promotion") return;
+
+    await interaction.deferReply();
+
+    /* =========================
+       GET DATA SAFE
+    ========================= */
+
+    const targetUser =
+      interaction.options.getUser("joueur");
+
+    const member =
+      await interaction.guild.members.fetch(targetUser.id);
+
+    const newRole =
+      interaction.options.getRole("role");
+
+    const reason =
+      interaction.options.getString("raison");
+
+    const issuer =
+      interaction.member;
+
+    /* =========================
+       FIND DEPARTMENT
+    ========================= */
+
+    let dept = null;
+    let deptName = null;
+
+    for (const [name, data] of Object.entries(DEPARTMENTS)) {
+
+      if (
+        issuer.roles.cache.some(
+          role => role.name === data.rootRole
+        )
+      ) {
+
+        dept = data;
+        deptName = name;
+
+      }
+
     }
-  }
 
-  if (!dept) {
-    return interaction.editReply("❌ Aucun département.");
-  }
+    if (!dept) {
 
-  if (!member.roles.cache.some(r => r.name === dept.rootRole)) {
-    return interaction.editReply("❌ Même département requis.");
-  }
+      return interaction.editReply(
+        "❌ Aucun département RP."
+      );
 
-  const validRoles = [
-    ...dept.ranks,
-    dept.formateur,
-    ...dept.special
-  ];
+    }
 
-  if (!validRoles.includes(newRole.name)) {
-    return interaction.editReply("❌ Grade non autorisé.");
-  }
+    /* =========================
+       SAME DEPARTMENT
+    ========================= */
 
-  const issuerIndex = dept.ranks.findIndex(r =>
-    issuer.roles.cache.some(role => role.name === r)
-  );
+    if (
+      !member.roles.cache.some(
+        role => role.name === dept.rootRole
+      )
+    ) {
 
-  const targetIndex = dept.ranks.indexOf(newRole.name);
+      return interaction.editReply(
+        "❌ Même département requis."
+      );
 
-  const bypass = issuer.roles.cache.some(r =>
-    dept.bypass.includes(r.name)
-  );
+    }
 
-  if (!bypass && targetIndex <= issuerIndex) {
-    return interaction.editReply("❌ Tu peux seulement promouvoir vers le bas.");
-  }
+    /* =========================
+       VALID ROLE
+    ========================= */
 
-  const currentIndex = dept.ranks.findIndex(r =>
-    member.roles.cache.some(role => role.name === r)
-  );
+    const validRoles = [
+      ...dept.ranks,
+      dept.formateur,
+      ...dept.special
+    ];
 
-  if (
-    !bypass &&
-    currentIndex !== -1 &&
-    targetIndex !== -1 &&
-    currentIndex - targetIndex > 1
-  ) {
-    return interaction.editReply("❌ Maximum 1 grade à la fois.");
-  }
+    if (
+      !validRoles.includes(newRole.name)
+    ) {
 
-  const oldRanks = member.roles.cache.filter(r =>
-    dept.ranks.includes(r.name)
-  );
+      return interaction.editReply(
+        "❌ Grade non autorisé."
+      );
 
-  await member.roles.remove(oldRanks);
-  await member.roles.add(newRole);
+    }
 
-  const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+    /* =========================
+       RANK CHECK
+    ========================= */
 
-  if (logChannel) {
-    logChannel.send(
-      `📢 PROMOTION RP\n\n👤 ${member.user.tag}\n🏅 ${newRole.name}\n📝 ${reason}\n👮 ${issuer.user.tag}\n🏛 ${deptName}`
+    const issuerIndex =
+      dept.ranks.findIndex(rank =>
+        issuer.roles.cache.some(
+          role => role.name === rank
+        )
+      );
+
+    const targetIndex =
+      dept.ranks.indexOf(newRole.name);
+
+    const bypass =
+      issuer.roles.cache.some(role =>
+        dept.bypass.includes(role.name)
+      );
+
+    if (
+      !bypass &&
+      targetIndex <= issuerIndex
+    ) {
+
+      return interaction.editReply(
+        "❌ Promotion refusée."
+      );
+
+    }
+
+    /* =========================
+       MAX 1 GRADE
+    ========================= */
+
+    const currentIndex =
+      dept.ranks.findIndex(rank =>
+        member.roles.cache.some(
+          role => role.name === rank
+        )
+      );
+
+    if (
+      !bypass &&
+      currentIndex !== -1 &&
+      targetIndex !== -1 &&
+      currentIndex - targetIndex > 1
+    ) {
+
+      return interaction.editReply(
+        "❌ Maximum 1 grade à la fois."
+      );
+
+    }
+
+    /* =========================
+       REMOVE OLD RANKS
+    ========================= */
+
+    const oldRanks =
+      member.roles.cache.filter(role =>
+        dept.ranks.includes(role.name)
+      );
+
+    await member.roles.remove(oldRanks);
+
+    /* =========================
+       ADD NEW ROLE
+    ========================= */
+
+    await member.roles.add(newRole);
+
+    /* =========================
+       LOG CHANNEL
+    ========================= */
+
+    const logChannel =
+      interaction.guild.channels.cache.get(
+        LOG_CHANNEL_ID
+      );
+
+    if (logChannel) {
+
+      await logChannel.send({
+        embeds: [
+          createPromotionEmbed({
+            member,
+            role: newRole,
+            issuer,
+            reason,
+            deptName
+          })
+        ]
+      });
+
+    }
+
+    /* =========================
+       SUCCESS
+    ========================= */
+
+    return interaction.editReply(
+      `✅ ${member} promu ➜ **${newRole.name}**`
     );
+
+  } catch (error) {
+
+    console.error("❌ INTERACTION ERROR:");
+    console.error(error);
+
+    if (interaction.deferred || interaction.replied) {
+
+      return interaction.editReply(
+        "❌ Une erreur est survenue."
+      );
+
+    }
+
+    return interaction.reply({
+      content: "❌ Une erreur est survenue.",
+      ephemeral: true
+    });
+
   }
 
-  return interaction.editReply(
-    `✅ ${member} promu ➜ **${newRole.name}** | ${reason}`
-  );
 });
