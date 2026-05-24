@@ -10,6 +10,22 @@ const {
 const express = require("express");
 
 /* =========================
+   DEBUG STARTUP
+========================= */
+
+console.log("🚀 Bot starting...");
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ UNCAUGHT EXCEPTION:");
+  console.error(err);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("❌ UNHANDLED REJECTION:");
+  console.error(err);
+});
+
+/* =========================
    ENV
 ========================= */
 
@@ -30,7 +46,7 @@ app.get("/", (_, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`🌐 Web server started on port ${PORT}`);
+  console.log("🌐 Web server started");
 });
 
 /* =========================
@@ -45,7 +61,20 @@ const client = new Client({
 });
 
 /* =========================
-   RP CONFIG
+   LOGIN DEBUG
+========================= */
+
+client.login(TOKEN)
+  .then(() => {
+    console.log("🔑 LOGIN RÉUSSI");
+  })
+  .catch((err) => {
+    console.error("❌ LOGIN FAILED:");
+    console.error(err);
+  });
+
+/* =========================
+   DEPARTMENTS
 ========================= */
 
 const DEPARTMENTS = {
@@ -94,25 +123,22 @@ const commands = [
   new SlashCommandBuilder()
     .setName("promotion")
     .setDescription("📢 Gestion RP des promotions")
-    .addUserOption(option =>
-      option
-        .setName("joueur")
+    .addUserOption(o =>
+      o.setName("joueur")
         .setDescription("Joueur RP")
         .setRequired(true)
     )
-    .addRoleOption(option =>
-      option
-        .setName("role")
+    .addRoleOption(o =>
+      o.setName("role")
         .setDescription("Nouveau grade")
         .setRequired(true)
     )
-    .addStringOption(option =>
-      option
-        .setName("raison")
+    .addStringOption(o =>
+      o.setName("raison")
         .setDescription("Raison RP")
         .setRequired(true)
     )
-].map(command => command.toJSON());
+].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -125,75 +151,17 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 
     console.log("✅ Commande /promotion enregistrée");
   } catch (error) {
-    console.error(error);
+    console.error("❌ Slash command error:", error);
   }
 })();
 
 /* =========================
-   HELPERS
-========================= */
-
-function getDepartment(member) {
-  return Object.entries(DEPARTMENTS).find(([_, dept]) =>
-    member.roles.cache.some(role => role.name === dept.rootRole)
-  );
-}
-
-function getRankIndex(dept, member) {
-  return dept.ranks.findIndex(rank =>
-    member.roles.cache.some(role => role.name === rank)
-  );
-}
-
-function isAllowedRole(dept, roleName) {
-  return (
-    dept.ranks.includes(roleName) ||
-    dept.special.includes(roleName) ||
-    roleName === dept.formateur
-  );
-}
-
-function createPromotionEmbed({
-  member,
-  role,
-  issuer,
-  reason,
-  deptName
-}) {
-  return new EmbedBuilder()
-    .setColor("Blue")
-    .setTitle("📢 Promotion RP")
-    .addFields(
-      {
-        name: "👤 Joueur",
-        value: member.user.tag
-      },
-      {
-        name: "🏅 Nouveau grade",
-        value: role.name
-      },
-      {
-        name: "📝 Raison",
-        value: reason
-      },
-      {
-        name: "👮 Promoteur",
-        value: issuer.user.tag
-      },
-      {
-        name: "🏛 Département",
-        value: deptName
-      }
-    )
-    .setTimestamp();
-}
-
-/* =========================
-   READY
+   READY DEBUG
 ========================= */
 
 client.once("ready", () => {
-  console.log(`🤖 RP Bot connecté : ${client.user.tag}`);
+  console.log("🤖 BOT READY EVENT TRIGGERED");
+  console.log("Bot:", client.user.tag);
 });
 
 /* =========================
@@ -212,49 +180,51 @@ client.on("interactionCreate", async interaction => {
   const reason = interaction.options.getString("raison");
   const issuer = interaction.member;
 
-  const deptData = getDepartment(issuer);
+  let dept = null;
+  let deptName = null;
 
-  if (!deptData) {
-    return interaction.editReply(
-      "❌ Tu n’es dans aucun département RP."
-    );
+  for (const [name, data] of Object.entries(DEPARTMENTS)) {
+    if (issuer.roles.cache.some(r => r.name === data.rootRole)) {
+      dept = data;
+      deptName = name;
+    }
   }
 
-  const [deptName, dept] = deptData;
-
-  if (
-    !member.roles.cache.some(role =>
-      role.name === dept.rootRole
-    )
-  ) {
-    return interaction.editReply(
-      "❌ Même département requis."
-    );
+  if (!dept) {
+    return interaction.editReply("❌ Aucun département.");
   }
 
-  if (
-    !isAllowedRole(dept, newRole.name) ||
-    ["NYSP", "NYPD"].includes(newRole.name)
-  ) {
-    return interaction.editReply(
-      "❌ Grade non autorisé."
-    );
+  if (!member.roles.cache.some(r => r.name === dept.rootRole)) {
+    return interaction.editReply("❌ Même département requis.");
   }
 
-  const issuerIndex = getRankIndex(dept, issuer);
+  const validRoles = [
+    ...dept.ranks,
+    dept.formateur,
+    ...dept.special
+  ];
+
+  if (!validRoles.includes(newRole.name)) {
+    return interaction.editReply("❌ Grade non autorisé.");
+  }
+
+  const issuerIndex = dept.ranks.findIndex(r =>
+    issuer.roles.cache.some(role => role.name === r)
+  );
+
   const targetIndex = dept.ranks.indexOf(newRole.name);
 
-  const bypass = issuer.roles.cache.some(role =>
-    dept.bypass.includes(role.name)
+  const bypass = issuer.roles.cache.some(r =>
+    dept.bypass.includes(r.name)
   );
 
   if (!bypass && targetIndex <= issuerIndex) {
-    return interaction.editReply(
-      "❌ Tu peux seulement promouvoir des grades inférieurs."
-    );
+    return interaction.editReply("❌ Tu peux seulement promouvoir vers le bas.");
   }
 
-  const currentIndex = getRankIndex(dept, member);
+  const currentIndex = dept.ranks.findIndex(r =>
+    member.roles.cache.some(role => role.name === r)
+  );
 
   if (
     !bypass &&
@@ -262,81 +232,25 @@ client.on("interactionCreate", async interaction => {
     targetIndex !== -1 &&
     currentIndex - targetIndex > 1
   ) {
-    return interaction.editReply(
-      "❌ Maximum 1 grade à la fois."
-    );
+    return interaction.editReply("❌ Maximum 1 grade à la fois.");
   }
 
-  if (newRole.name === dept.formateur) {
-
-    const allowed = issuer.roles.cache.some(role =>
-      dept.top.includes(role.name)
-    );
-
-    if (!allowed) {
-      return interaction.editReply(
-        "❌ Accès Formateur refusé."
-      );
-    }
-  }
-
-  if (dept.special.includes(newRole.name)) {
-
-    const allowed = issuer.roles.cache.some(role =>
-      dept.top.includes(role.name) ||
-      role.name === dept.formateur
-    );
-
-    if (!allowed) {
-      return interaction.editReply(
-        "❌ Accès rôle spécial refusé."
-      );
-    }
-  }
-
-  /* REMOVE OLD RANKS */
-
-  const oldRanks = member.roles.cache.filter(role =>
-    dept.ranks.includes(role.name)
+  const oldRanks = member.roles.cache.filter(r =>
+    dept.ranks.includes(r.name)
   );
 
   await member.roles.remove(oldRanks);
-
-  /* ADD NEW ROLE */
-
   await member.roles.add(newRole);
 
-  /* LOG CHANNEL */
-
-  const logChannel =
-    interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+  const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
 
   if (logChannel) {
-
-    logChannel.send({
-      embeds: [
-        createPromotionEmbed({
-          member,
-          role: newRole,
-          issuer,
-          reason,
-          deptName
-        })
-      ]
-    });
-
+    logChannel.send(
+      `📢 PROMOTION RP\n\n👤 ${member.user.tag}\n🏅 ${newRole.name}\n📝 ${reason}\n👮 ${issuer.user.tag}\n🏛 ${deptName}`
+    );
   }
-
-  /* FINAL MESSAGE */
 
   return interaction.editReply(
     `✅ ${member} promu ➜ **${newRole.name}** | ${reason}`
   );
-
 });
-
-/* =========================
-   LOGIN
-========================= */
-
-client.login(TOKEN);
