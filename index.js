@@ -10,7 +10,7 @@ const {
 const express = require("express");
 
 /* =========================
-   GLOBAL DEBUG / ANTI CRASH
+   STARTUP DEBUG
 ========================= */
 
 console.log("🚀 Bot starting...");
@@ -74,6 +74,23 @@ client.login(TOKEN)
   });
 
 /* =========================
+   ANTI OFFLINE
+========================= */
+
+client.on("disconnect", () => {
+  console.log("❌ Bot disconnected");
+});
+
+client.on("reconnecting", () => {
+  console.log("🔄 Bot reconnecting...");
+});
+
+client.on("error", (error) => {
+  console.error("❌ Discord client error:");
+  console.error(error);
+});
+
+/* =========================
    DEPARTMENTS
 ========================= */
 
@@ -104,11 +121,6 @@ const DEPARTMENTS = {
       "Major",
       "Major Adjoint",
       "Capitaine"
-    ],
-
-    top: [
-      "Major",
-      "Major Adjoint"
     ]
   },
 
@@ -134,11 +146,6 @@ const DEPARTMENTS = {
     ],
 
     bypass: [
-      "Capitaine",
-      "Capitaine Adjoint"
-    ],
-
-    top: [
       "Capitaine",
       "Capitaine Adjoint"
     ]
@@ -208,62 +215,13 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 client.once("ready", () => {
 
-  console.log("🤖 BOT READY EVENT");
+  console.log("🤖 BOT READY");
   console.log(`🤖 Connecté en tant que ${client.user.tag}`);
 
 });
 
 /* =========================
-   EMBED LOG
-========================= */
-
-function createPromotionEmbed({
-  member,
-  role,
-  issuer,
-  reason,
-  deptName
-}) {
-
-  return new EmbedBuilder()
-
-    .setColor("Blue")
-
-    .setTitle("📢 Promotion RP")
-
-    .addFields(
-      {
-        name: "👤 Joueur",
-        value: member.user.tag
-      },
-
-      {
-        name: "🏅 Nouveau grade",
-        value: role.name
-      },
-
-      {
-        name: "📝 Raison",
-        value: reason
-      },
-
-      {
-        name: "👮 Promoteur",
-        value: issuer.user.tag
-      },
-
-      {
-        name: "🏛 Département",
-        value: deptName
-      }
-    )
-
-    .setTimestamp();
-
-}
-
-/* =========================
-   INTERACTION CREATE
+   PROMOTION SYSTEM
 ========================= */
 
 client.on("interactionCreate", async (interaction) => {
@@ -278,9 +236,7 @@ client.on("interactionCreate", async (interaction) => {
 
     await interaction.deferReply();
 
-    /* =========================
-       GET DATA SAFE
-    ========================= */
+    /* USER */
 
     const targetUser =
       interaction.options.getUser("joueur");
@@ -297,14 +253,11 @@ client.on("interactionCreate", async (interaction) => {
     const issuer =
       interaction.member;
 
-    /* =========================
-       FIND DEPARTMENT
-    ========================= */
+    /* FIND DEPARTMENT */
 
     let dept = null;
-    let deptName = null;
 
-    for (const [name, data] of Object.entries(DEPARTMENTS)) {
+    for (const data of Object.values(DEPARTMENTS)) {
 
       if (
         issuer.roles.cache.some(
@@ -313,7 +266,6 @@ client.on("interactionCreate", async (interaction) => {
       ) {
 
         dept = data;
-        deptName = name;
 
       }
 
@@ -327,9 +279,7 @@ client.on("interactionCreate", async (interaction) => {
 
     }
 
-    /* =========================
-       SAME DEPARTMENT
-    ========================= */
+    /* SAME DEPARTMENT */
 
     if (
       !member.roles.cache.some(
@@ -343,9 +293,7 @@ client.on("interactionCreate", async (interaction) => {
 
     }
 
-    /* =========================
-       VALID ROLE
-    ========================= */
+    /* VALID ROLE */
 
     const validRoles = [
       ...dept.ranks,
@@ -363,63 +311,7 @@ client.on("interactionCreate", async (interaction) => {
 
     }
 
-    /* =========================
-       RANK CHECK
-    ========================= */
-
-    const issuerIndex =
-      dept.ranks.findIndex(rank =>
-        issuer.roles.cache.some(
-          role => role.name === rank
-        )
-      );
-
-    const targetIndex =
-      dept.ranks.indexOf(newRole.name);
-
-    const bypass =
-      issuer.roles.cache.some(role =>
-        dept.bypass.includes(role.name)
-      );
-
-    if (
-      !bypass &&
-      targetIndex <= issuerIndex
-    ) {
-
-      return interaction.editReply(
-        "❌ Promotion refusée."
-      );
-
-    }
-
-    /* =========================
-       MAX 1 GRADE
-    ========================= */
-
-    const currentIndex =
-      dept.ranks.findIndex(rank =>
-        member.roles.cache.some(
-          role => role.name === rank
-        )
-      );
-
-    if (
-      !bypass &&
-      currentIndex !== -1 &&
-      targetIndex !== -1 &&
-      currentIndex - targetIndex > 1
-    ) {
-
-      return interaction.editReply(
-        "❌ Maximum 1 grade à la fois."
-      );
-
-    }
-
-    /* =========================
-       REMOVE OLD RANKS
-    ========================= */
+    /* REMOVE OLD RANKS */
 
     const oldRanks =
       member.roles.cache.filter(role =>
@@ -428,43 +320,41 @@ client.on("interactionCreate", async (interaction) => {
 
     await member.roles.remove(oldRanks);
 
-    /* =========================
-       ADD NEW ROLE
-    ========================= */
+    /* ADD NEW ROLE */
 
     await member.roles.add(newRole);
 
-    /* =========================
-       LOG CHANNEL
-    ========================= */
+    /* LOGS */
 
     const logChannel =
       interaction.guild.channels.cache.get(
         LOG_CHANNEL_ID
       );
 
+    const embed = new EmbedBuilder()
+
+      .setColor("Blue")
+
+      .setTitle("📢 Promotion RP")
+
+      .setDescription(
+`${member} :arrow_right: ${newRole} :military_medal: ${reason}`
+      )
+
+      .setTimestamp();
+
     if (logChannel) {
 
       await logChannel.send({
-        embeds: [
-          createPromotionEmbed({
-            member,
-            role: newRole,
-            issuer,
-            reason,
-            deptName
-          })
-        ]
+        embeds: [embed]
       });
 
     }
 
-    /* =========================
-       SUCCESS
-    ========================= */
+    /* FINAL MESSAGE */
 
     return interaction.editReply(
-      `✅ ${member} promu ➜ **${newRole.name}**`
+      `${member} :arrow_right: ${newRole} :military_medal: ${reason}`
     );
 
   } catch (error) {
