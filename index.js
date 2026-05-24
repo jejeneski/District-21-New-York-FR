@@ -61,19 +61,6 @@ const client = new Client({
 });
 
 /* =========================
-   LOGIN
-========================= */
-
-client.login(TOKEN)
-  .then(() => {
-    console.log("🔑 LOGIN RÉUSSI");
-  })
-  .catch((err) => {
-    console.error("❌ LOGIN FAILED:");
-    console.error(err);
-  });
-
-/* =========================
    ANTI OFFLINE
 ========================= */
 
@@ -115,12 +102,6 @@ const DEPARTMENTS = {
     special: [
       "Investigateur",
       "State SWAT"
-    ],
-
-    bypass: [
-      "Major",
-      "Major Adjoint",
-      "Capitaine"
     ]
   },
 
@@ -143,11 +124,6 @@ const DEPARTMENTS = {
     special: [
       "Détective",
       "SWAT NYPD"
-    ],
-
-    bypass: [
-      "Capitaine",
-      "Capitaine Adjoint"
     ]
   }
 
@@ -187,11 +163,18 @@ const commands = [
 
 ].map(command => command.toJSON());
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+/* =========================
+   READY
+========================= */
 
-(async () => {
+client.once("clientReady", async () => {
+
+  console.log("🤖 BOT READY");
+  console.log(`🤖 Connecté en tant que ${client.user.tag}`);
 
   try {
+
+    const rest = new REST({ version: "10" }).setToken(TOKEN);
 
     await rest.put(
       Routes.applicationCommands(CLIENT_ID),
@@ -206,17 +189,6 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
     console.error(error);
 
   }
-
-})();
-
-/* =========================
-   READY
-========================= */
-
-client.once("ready", () => {
-
-  console.log("🤖 BOT READY");
-  console.log(`🤖 Connecté en tant que ${client.user.tag}`);
 
 });
 
@@ -324,12 +296,7 @@ client.on("interactionCreate", async (interaction) => {
 
     await member.roles.add(newRole);
 
-    /* LOGS */
-
-    const logChannel =
-      interaction.guild.channels.cache.get(
-        LOG_CHANNEL_ID
-      );
+    /* EMBED */
 
     const embed = new EmbedBuilder()
 
@@ -342,6 +309,13 @@ client.on("interactionCreate", async (interaction) => {
       )
 
       .setTimestamp();
+
+    /* LOG CHANNEL */
+
+    const logChannel =
+      interaction.guild.channels.cache.get(
+        LOG_CHANNEL_ID
+      );
 
     if (logChannel) {
 
@@ -378,3 +352,9 @@ client.on("interactionCreate", async (interaction) => {
   }
 
 });
+
+/* =========================
+   LOGIN (TOUT EN BAS)
+========================= */
+
+client.login(TOKEN);
